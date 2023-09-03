@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ตรวจสอบการสวมหมวกกันน็อค</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-Zenh87qX5JnK2Jl0vWa8Ck2rdkQ2Bzep5IDxbcnCeuOxjzrPF/et3URy9Bv1WTRi"
+      crossorigin="anonymous"
+    />
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sarabun&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <style>
+    html,
+    body {
+      background-color: rgb(240, 240, 240);
+    }
+    * {
+      font-family: "Sarabun", sans-serif;
+    }
+  </style>
+  <body>
+    <div id="app" class="container">
+      <div class="card col-md-6 mt-5 mx-auto">
+        <div class="card-body">
+          <h3>ตรวจสอบการสวมหมวกกันน็อค</h3>
+          <input :disabled="loading" v-on:change="onFileChange" accept="image/*" type="file" class="form-control" />
+          <button
+            v-if="!loading"
+            :disabled="file == undefined"
+            @click="upload()"
+            class="btn btn-primary w-100 mt-2 mb-3"
+          >
+            อัพโหลด
+          </button>
+          <button v-else disabled class="btn btn-primary w-100 mt-2 mb-3">
+            <div
+              class="spinner-border spinner-border-sm text-light"
+              role="status"
+            >
+              <span class="visually-hidden"></span>
+            </div>
+            Loading...
+          </button>
+          <div v-if="result_status" class="alert alert-primary" role="alert">
+            หลังการทำการประมวลผลได้คำตอบว่า <b>{{ output }}</b>
+          </div>
+          <img v-if="result_status" :src="imageSrc" alt="NoImage" style="width: 100%;" />
+        </div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"
+      integrity="sha384-oBqDVmMz9ATKxIep9tiCxS/Z9fNfEXiDAYTujMAeBAsjFuCZSmKbSSUnQlmh/jp3"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.min.js"
+      integrity="sha384-IDwe1+LCz02ROU9k972gdyvl+AESN10+x7tBKgc9I5HFtuNz0wWnPclzo6p9vxnk"
+      crossorigin="anonymous"
+    ></script>
+    <script src="//cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+      const { createApp, toRaw } = Vue;
+
+      createApp({
+        data() {
+          return {
+            image: undefined,
+            imageSrc: "",
+            file: undefined,
+            model: undefined,
+            loading: false,
+            result_status: false,
+            output: "",
+          };
+        },
+        methods: {
+          async onFileChange(e) {
+            var files = e.target.files || e.dataTransfer.files;
+            if (!files.length) return;
+            this.file = files[0];
+          },
+          async check_file() {
+            return this.file && this.file['type'].split('/')[0] == 'image';
+          },
+          async clearData() {
+            this.image = undefined;
+          },
+          async upload() {
+            this.clearData()
+            if (await this.check_file()) {
+              this.result_status = false;
+              this.loading = true;
+              const reader = new FileReader();
+              reader.onload = () => {
+                let image = new Image(120, 120);
+                image.src = reader.result;
+                this.imageSrc = reader.result;
+                let tfTensor = tf.browser
+                  .fromPixels(image)
+                  .resizeNearestNeighbor([120, 120])
+                  .cast("float32")
+                  .expandDims();
+                this.image = tfTensor;
+                this.load_model();
+              };
+              reader.readAsDataURL(this.file);
+            } else {
+              Swal.fire({
+                icon: "warning",
+                title: "คำเตือน",
+                text: "กรุณาเลือกไฟส์ที่เป็นรูปภาพเท่านั้น",
+              });
+            }
+          },
+          async load_model() {
+            this.model = await tf.loadLayersModel("./model.json");
+            if (this.model != undefined) {
+              console.log("Load Model Success");
+            } else {
+              console.log("Load Model Error");
+            }
+            this.predict();
+			this.predict();
+          },
+          async predict() {
+            const raw_model = toRaw(this.model)
+            const raw_image = toRaw(this.image);
+            const output = await raw_model.predict(raw_image).data();
+            this.output = tf.argMax(output).dataSync()[0] == 1 ? "สวมหมวก" : "ไม่สวมหมวก";
+            this.loading = false;
+            this.result_status = true;
+          },
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
